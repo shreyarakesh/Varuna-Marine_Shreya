@@ -1,0 +1,274 @@
+openapi: 3.1.0
+info:
+  title: FuelEU Maritime — Compliance API
+  version: "0.1.0"
+  summary: Minimal API for GHG intensity, Compliance Balance, banking, borrowing, and pooling.
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+  /api/compute/cb:
+    post:
+      summary: Compute GHG intensity, energy in scope, CB, and penalty for a ship-year
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShipEnergyReport'
+            examples:
+              sample:
+                value:
+                  shipIMO: "9876543"
+                  year: 2025
+                  ghgieTarget_g_per_MJ: 91.16
+                  windRewardFactor: 1.0
+                  fuels:
+                    - fuelType: VLSFO
+                      mass_tonnes: 800
+                      lcv_MJ_per_tonne: 41000
+                      wtt_gCO2e_per_MJ: 15
+                      ttw_gCO2e_per_MJ: 74
+                      isRFNBO: false
+                    - fuelType: e-diesel
+                      mass_tonnes: 50
+                      lcv_MJ_per_tonne: 43000
+                      wtt_gCO2e_per_MJ: 13.17
+                      ttw_gCO2e_per_MJ: 76.37
+                      isRFNBO: true
+                  shorePowers:
+                    - connectionId: OPS-KW-1
+                      energy_MJ: 250000
+      responses:
+        '200':
+          description: Compliance result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceResult'
+  /api/borrow:
+    post:
+      summary: Check borrowing ceiling (ACS) and aggravated ACS for Year N+1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BorrowRequest'
+            examples:
+              sample:
+                value:
+                  companyId: ACME
+                  yearN: 2025
+                  energyInScope_MJ: 40000000
+                  ghgieTarget_g_per_MJ: 91.16
+                  requestedACS_gCO2e: 100000000
+      responses:
+        '200':
+          description: Borrowing result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  limit_gCO2e:
+                    type: number
+                  approvedACS_gCO2e:
+                    type: number
+                  aggravatedACS_gCO2e:
+                    type: number
+                  note:
+                    type: string
+        '400':
+          description: Invalid request
+  /api/bank:
+    post:
+      summary: Bank a verified positive compliance balance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankRequest'
+            examples:
+              sample:
+                value:
+                  companyId: ACME
+                  year: 2025
+                  verifiedComplianceBalance_gCO2e: 123456789
+      responses:
+        '200':
+          description: Banked OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: banked
+                  companyId:
+                    type: string
+                  year:
+                    type: integer
+                  amount_gCO2e:
+                    type: number
+        '400':
+          description: Banking not allowed unless Verified CB > 0
+  /api/pool:
+    post:
+      summary: Create/compute a pool result from ship balances
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PoolRequest'
+            examples:
+              sample:
+                value:
+                  poolId: POOL-2025-01
+                  ships:
+                    - imo: "9876543"
+                      adjustedComplianceBalance_gCO2e: 5000000
+                    - imo: "1234567"
+                      adjustedComplianceBalance_gCO2e: -4000000
+      responses:
+        '200':
+          description: Pool result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  poolId:
+                    type: string
+                  total_gCO2e:
+                    type: number
+                  message:
+                    type: string
+        '400':
+          description: Pooling requires at least one ship with surplus
+components:
+  schemas:
+    FuelConsumed:
+      type: object
+      properties:
+        fuelType:
+          type: string
+          description: Fuel name/category
+          example: VLSFO
+        mass_tonnes:
+          type: number
+          example: 1000
+        lcv_MJ_per_tonne:
+          type: number
+          example: 41000
+        wtt_gCO2e_per_MJ:
+          type: number
+          example: 15
+        ttw_gCO2e_per_MJ:
+          type: number
+          example: 74
+        isRFNBO:
+          type: boolean
+          example: false
+      required: [fuelType, mass_tonnes, lcv_MJ_per_tonne, wtt_gCO2e_per_MJ, ttw_gCO2e_per_MJ]
+    ShorePowerUse:
+      type: object
+      properties:
+        connectionId:
+          type: string
+          example: OPS-1
+        energy_MJ:
+          type: number
+          example: 500000
+      required: [connectionId, energy_MJ]
+    VoyageInScope:
+      type: object
+      properties:
+        id: { type: string }
+        scope:
+          type: string
+          enum: [intra-EEA, extra-EEA-inward, extra-EEA-outward, at-berth, in-port]
+        startPort: { type: string }
+        endPort: { type: string }
+        energyShare:
+          type: number
+          description: Portion of voyage energy counted in scope (0..1)
+      required: [id, scope, startPort, endPort, energyShare]
+    ShipEnergyReport:
+      type: object
+      properties:
+        shipIMO: { type: string, example: "1234567" }
+        year: { type: integer, example: 2025 }
+        fuels:
+          type: array
+          items: { $ref: '#/components/schemas/FuelConsumed' }
+        shorePowers:
+          type: array
+          items: { $ref: '#/components/schemas/ShorePowerUse' }
+        voyages:
+          type: array
+          items: { $ref: '#/components/schemas/VoyageInScope' }
+        windRewardFactor:
+          type: number
+          description: f_wind (>=0), 1.0 means no reward
+          example: 1.0
+        ghgieTarget_g_per_MJ:
+          type: number
+          description: Regulatory target for the reporting year
+          example: 91.16
+      required: [shipIMO, year, fuels, ghgieTarget_g_per_MJ]
+    ComplianceResult:
+      type: object
+      properties:
+        ghgie_actual_g_per_MJ: { type: number }
+        energyInScope_MJ: { type: number }
+        complianceBalance_gCO2e: { type: number }
+        penalty_EUR: { type: number }
+        notes:
+          type: array
+          items: { type: string }
+    PoolRequest:
+      type: object
+      properties:
+        poolId: { type: string }
+        ships:
+          type: array
+          items:
+            type: object
+            properties:
+              imo: { type: string }
+              adjustedComplianceBalance_gCO2e: { type: number }
+            required: [imo, adjustedComplianceBalance_gCO2e]
+      required: [poolId, ships]
+    BankRequest:
+      type: object
+      properties:
+        companyId: { type: string }
+        year: { type: integer }
+        verifiedComplianceBalance_gCO2e: { type: number }
+      required: [companyId, year, verifiedComplianceBalance_gCO2e]
+    BorrowRequest:
+      type: object
+      properties:
+        companyId: { type: string }
+        yearN: { type: integer }
+        energyInScope_MJ: { type: number }
+        ghgieTarget_g_per_MJ: { type: number }
+        requestedACS_gCO2e: { type: number }
+      required: [companyId, yearN, energyInScope_MJ, ghgieTarget_g_per_MJ, requestedACS_gCO2e]

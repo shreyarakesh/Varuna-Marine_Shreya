@@ -1,0 +1,30 @@
+{
+  "shipIMO": "9876543",
+  "year": 2025,
+  "ghgieTarget_g_per_MJ": 91.16,
+  "windRewardFactor": 1.0,
+  "fuels": [
+    {
+      "fuelType": "VLSFO",
+      "mass_tonnes": 800,
+      "lcv_MJ_per_tonne": 41000,
+      "wtt_gCO2e_per_MJ": 15,
+      "ttw_gCO2e_per_MJ": 74,
+      "isRFNBO": false
+    },
+    {
+      "fuelType": "e-diesel",
+      "mass_tonnes": 50,
+      "lcv_MJ_per_tonne": 43000,
+      "wtt_gCO2e_per_MJ": 13.17,
+      "ttw_gCO2e_per_MJ": 76.37,
+      "isRFNBO": true
+    }
+  ],
+  "shorePowers": [
+    {
+      "connectionId": "OPS-KW-1",
+      "energy_MJ": 250000
+    }
+  ]
+}
